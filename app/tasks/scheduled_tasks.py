@@ -12,7 +12,6 @@ from app.workers.celery_app import celery_app
 
 
 def _run_async(coro):
-    """Bridge: run an async coroutine to completion from inside a sync Celery task."""
     return asyncio.run(coro)
 
 
@@ -37,8 +36,9 @@ async def _store_article_and_newsletter(topic_id: int, pipeline_result: dict) ->
         newsletter = Newsletter(article_id=article.id, content=pipeline_result["newsletter"])
         db.add(newsletter)
         await db.commit()
+        await db.refresh(newsletter)
 
-        return article.id
+        return newsletter.id  # Return newsletter_id so we can dispatch emails
 
 
 async def _process_topic(topic: Topic) -> dict:
@@ -46,28 +46,34 @@ async def _process_topic(topic: Topic) -> dict:
         return {"topic_id": topic.id, "skipped": True, "reason": "already generated today"}
 
     pipeline_result = await run_content_pipeline(topic=topic.name, tone=topic.tone)
-    article_id = await _store_article_and_newsletter(topic.id, pipeline_result)
+    newsletter_id = await _store_article_and_newsletter(topic.id, pipeline_result)
     await mark_generated_today(topic.name)
 
-    return {"topic_id": topic.id, "article_id": article_id, "skipped": False}
+    return {"topic_id": topic.id, "newsletter_id": newsletter_id, "skipped": False}
 
 
 @celery_app.task(name="content.daily_content_generation", bind=True)
 def daily_content_generation(self) -> dict:
     """
     Celery Beat scheduled job.
-
-    For every topic (unless already generated today, per Redis cache):
-    1. Run the LangGraph pipeline (keywords -> outline -> article -> SEO -> newsletter)
-    2. Store the article
-    3. Store the newsletter summary
+    Generates article + newsletter per topic, then dispatches email delivery.
     """
+    from app.tasks.email_tasks import dispatch_newsletter_emails  # avoid circular import
+
     topics = _run_async(_fetch_all_topics())
 
     results = []
     for topic in topics:
         try:
-            results.append(_run_async(_process_topic(topic)))
+            result = _run_async(_process_topic(topic))
+            results.append(result)
+
+            # Trigger email dispatch for newly generated newsletters
+            if not result.get("skipped") and result.get("newsletter_id"):
+                dispatch_newsletter_emails.apply_async(
+                    args=[result["newsletter_id"]],
+                    queue="email_queue",
+                )
         except Exception as exc:
             results.append({"topic_id": topic.id, "error": str(exc)})
 

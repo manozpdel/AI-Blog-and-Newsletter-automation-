@@ -9,7 +9,8 @@ celery_app = Celery(
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
         "app.tasks.content_tasks",
-        "app.tasks.scheduled_tasks",  # Added in Task 3
+        "app.tasks.scheduled_tasks",
+        "app.tasks.email_tasks",   # Added in Task 5
     ],
 )
 
@@ -21,12 +22,17 @@ celery_app.conf.update(
     enable_utc=True,
     result_extended=True,
     task_track_started=True,
+    # Task 5: dedicated queues
+    task_routes={
+        "content.*": {"queue": "content_queue"},
+        "email.*":   {"queue": "email_queue"},
+    },
 )
 
-# --- Added in Task 3: Celery Beat schedule ---
+# Celery Beat schedule (Task 3)
 celery_app.conf.beat_schedule = {
     "daily_content_generation": {
         "task": "content.daily_content_generation",
-        "schedule": crontab(hour=6, minute=0),  # every day at 06:00 UTC
+        "schedule": crontab(hour=6, minute=0),
     },
 }

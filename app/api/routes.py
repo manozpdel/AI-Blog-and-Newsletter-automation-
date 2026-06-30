@@ -1,13 +1,18 @@
+import csv
+import io
+
 from celery import chain
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import rate_limit
 from app.db.session import get_db
+from app.models.email_log import EmailLog, EmailStatus
 from app.models.models import Article, ArticleStatus, Topic
 from app.models.newsletter import Newsletter
+from app.models.subscriber import Subscriber
 from app.schemas.schemas import (
     ArticleOut,
     GenerateNewsletterResponse,
@@ -16,6 +21,14 @@ from app.schemas.schemas import (
     TaskStatusResponse,
     TopicCreate,
     TopicOut,
+)
+from app.schemas.subscriber import (
+    CSVImportResult,
+    EmailLogOut,
+    EmailStatistics,
+    SubscriberCreate,
+    SubscriberOut,
+    SubscriberUpdate,
 )
 from app.services.llm_service import generate_newsletter_summary
 from app.tasks.content_tasks import (
@@ -29,7 +42,7 @@ router = APIRouter(dependencies=[Depends(rate_limit)])
 
 
 # ---------------------------------------------------------------------------
-# Health  (added in Task 4)
+# Health
 # ---------------------------------------------------------------------------
 
 
@@ -39,7 +52,7 @@ async def health():
 
 
 # ---------------------------------------------------------------------------
-# Topics (unchanged from Task 3)
+# Topics
 # ---------------------------------------------------------------------------
 
 
@@ -59,15 +72,12 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# Generate (unchanged from Task 3)
+# Generate
 # ---------------------------------------------------------------------------
 
 
 @router.post("/generate/{topic_id}", response_model=TaskQueuedResponse, tags=["generate"])
 async def generate_article(topic_id: int, db: AsyncSession = Depends(get_db)):
-    """
-    Background article generation via Celery chain (unchanged from Task 2).
-    """
     topic = await db.get(Topic, topic_id)
     if topic is None:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -87,16 +97,12 @@ async def generate_article(topic_id: int, db: AsyncSession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# Tasks  (added /tasks/stats in Task 4)
+# Tasks
 # ---------------------------------------------------------------------------
 
 
 @router.get("/tasks/stats", tags=["tasks"])
 async def get_task_stats():
-    """
-    Live Celery worker stats used by the Streamlit dashboard.
-    Returns active / scheduled / reserved task counts.
-    """
     inspect = celery_app.control.inspect(timeout=2)
     try:
         active_raw    = inspect.active()    or {}
@@ -107,7 +113,6 @@ async def get_task_stats():
         reserved  = sum(len(v) for v in reserved_raw.values())
     except Exception:
         active = scheduled = reserved = 0
-
     return {"active": active, "scheduled": scheduled, "reserved": reserved, "failed": 0}
 
 
@@ -127,7 +132,7 @@ async def get_task_status(task_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Articles (unchanged from Task 3)
+# Articles
 # ---------------------------------------------------------------------------
 
 
@@ -146,7 +151,7 @@ async def get_article(article_id: int, db: AsyncSession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# Added in Task 3: Newsletters
+# Newsletters  (trigger email dispatch after saving — Task 5)
 # ---------------------------------------------------------------------------
 
 
@@ -156,11 +161,8 @@ async def get_article(article_id: int, db: AsyncSession = Depends(get_db)):
     tags=["newsletters"],
 )
 async def generate_newsletter(article_id: int, db: AsyncSession = Depends(get_db)):
-    """
-    On-demand newsletter generation for an existing (already-generated) article.
-    Synchronous, single LLM call -- the article content already exists, so there's
-    no need to queue this through Celery.
-    """
+    from app.tasks.email_tasks import dispatch_newsletter_emails  # avoid circular import
+
     article = await db.get(Article, article_id)
     if article is None:
         raise HTTPException(status_code=404, detail="Article not found")
@@ -174,6 +176,12 @@ async def generate_newsletter(article_id: int, db: AsyncSession = Depends(get_db
     db.add(newsletter)
     await db.commit()
     await db.refresh(newsletter)
+
+    # Automatically kick off email delivery to all active subscribers
+    dispatch_newsletter_emails.apply_async(
+        args=[newsletter.id], queue="email_queue"
+    )
+
     return GenerateNewsletterResponse(
         newsletter_id=newsletter.id, article_id=article.id, content=newsletter.content
     )
@@ -191,3 +199,143 @@ async def get_newsletter(newsletter_id: int, db: AsyncSession = Depends(get_db))
     if newsletter is None:
         raise HTTPException(status_code=404, detail="Newsletter not found")
     return newsletter
+
+
+# ---------------------------------------------------------------------------
+# Subscribers  (new in Task 5)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/subscribers", response_model=SubscriberOut, status_code=201, tags=["subscribers"])
+async def create_subscriber(payload: SubscriberCreate, db: AsyncSession = Depends(get_db)):
+    existing = await db.execute(
+        select(Subscriber).where(Subscriber.email == payload.email)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Email already subscribed")
+    subscriber = Subscriber(name=payload.name, email=payload.email, is_active=payload.is_active)
+    db.add(subscriber)
+    await db.commit()
+    await db.refresh(subscriber)
+    return subscriber
+
+
+@router.get("/subscribers", response_model=list[SubscriberOut], tags=["subscribers"])
+async def list_subscribers(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Subscriber).order_by(Subscriber.id.desc()))
+    return result.scalars().all()
+
+
+@router.get("/subscribers/{subscriber_id}", response_model=SubscriberOut, tags=["subscribers"])
+async def get_subscriber(subscriber_id: int, db: AsyncSession = Depends(get_db)):
+    subscriber = await db.get(Subscriber, subscriber_id)
+    if subscriber is None:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+    return subscriber
+
+
+@router.put("/subscribers/{subscriber_id}", response_model=SubscriberOut, tags=["subscribers"])
+async def update_subscriber(
+    subscriber_id: int, payload: SubscriberUpdate, db: AsyncSession = Depends(get_db)
+):
+    subscriber = await db.get(Subscriber, subscriber_id)
+    if subscriber is None:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(subscriber, field, value)
+    await db.commit()
+    await db.refresh(subscriber)
+    return subscriber
+
+
+@router.delete("/subscribers/{subscriber_id}", status_code=204, tags=["subscribers"])
+async def delete_subscriber(subscriber_id: int, db: AsyncSession = Depends(get_db)):
+    subscriber = await db.get(Subscriber, subscriber_id)
+    if subscriber is None:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+    await db.delete(subscriber)
+    await db.commit()
+
+
+@router.post("/subscribers/import", response_model=CSVImportResult, tags=["subscribers"])
+async def import_subscribers(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    """
+    Accept a CSV with header: name,email
+    Returns imported count, skipped (duplicate) count, and invalid rows.
+    """
+    content = await file.read()
+    text = content.decode("utf-8", errors="ignore")
+    reader = csv.DictReader(io.StringIO(text))
+
+    imported = 0
+    skipped = 0
+    invalid_rows: list[str] = []
+
+    for row in reader:
+        name = (row.get("name") or "").strip()
+        email = (row.get("email") or "").strip()
+
+        if not name or not email or "@" not in email:
+            invalid_rows.append(str(row))
+            continue
+
+        existing = await db.execute(select(Subscriber).where(Subscriber.email == email))
+        if existing.scalar_one_or_none():
+            skipped += 1
+            continue
+
+        db.add(Subscriber(name=name, email=email, is_active=True))
+        imported += 1
+
+    await db.commit()
+    return CSVImportResult(imported=imported, skipped=skipped, invalid_rows=invalid_rows)
+
+
+# ---------------------------------------------------------------------------
+# Email logs + statistics  (new in Task 5)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/email/logs", response_model=list[EmailLogOut], tags=["email"])
+async def list_email_logs(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(EmailLog).order_by(EmailLog.id.desc()))
+    return result.scalars().all()
+
+
+@router.get("/email/logs/{newsletter_id}", response_model=list[EmailLogOut], tags=["email"])
+async def get_email_logs_for_newsletter(
+    newsletter_id: int, db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(EmailLog)
+        .where(EmailLog.newsletter_id == newsletter_id)
+        .order_by(EmailLog.id.desc())
+    )
+    return result.scalars().all()
+
+
+@router.get("/email/statistics", response_model=EmailStatistics, tags=["email"])
+async def get_email_statistics(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(EmailLog))
+    logs = result.scalars().all()
+
+    total     = len(logs)
+    delivered = sum(1 for l in logs if l.status == EmailStatus.SENT)
+    failed    = sum(1 for l in logs if l.status == EmailStatus.FAILED)
+    pending   = sum(1 for l in logs if l.status in (EmailStatus.PENDING, EmailStatus.RETRYING))
+    success_pct = round((delivered / total * 100), 2) if total > 0 else 0.0
+
+    return EmailStatistics(
+        total_emails=total,
+        successful_deliveries=delivered,
+        failed_deliveries=failed,
+        pending=pending,
+        success_percentage=success_pct,
+    )
+
+
+@router.post("/email/retry/{newsletter_id}", tags=["email"])
+async def retry_failed_emails(newsletter_id: int):
+    from app.tasks.email_tasks import retry_failed_emails as retry_task
+    result = retry_task.apply_async(args=[newsletter_id], queue="email_queue")
+    return {"task_id": result.id, "status": "queued"}

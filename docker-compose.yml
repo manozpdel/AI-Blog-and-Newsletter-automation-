@@ -19,7 +19,12 @@ services:
   worker:
     build: .
     container_name: ai-content-worker
-    command: ["uv", "run", "celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
+    # Consumes both content_queue and email_queue — no new containers needed
+    command: [
+      "uv", "run", "celery", "-A", "app.workers.celery_app", "worker",
+      "--loglevel=info",
+      "--queues=content_queue,email_queue"
+    ]
     env_file:
       - .env
     depends_on:
