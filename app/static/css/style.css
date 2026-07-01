@@ -1,0 +1,291 @@
+/* ============================================================
+   AI Content Platform — Custom Dashboard Styles
+   ============================================================ */
+
+:root {
+  --sidebar-width: 240px;
+  --sidebar-bg: #1a1d23;
+  --navbar-height: 56px;
+  --primary: #4f6ef7;
+  --surface: #ffffff;
+  --border: #e9ecef;
+  --text-muted: #6c757d;
+}
+
+/* ── Layout ─────────────────────────────────────────── */
+
+body {
+  background: #f5f6fa;
+  font-size: 0.9rem;
+  overflow-x: hidden;
+}
+
+.top-navbar {
+  height: var(--navbar-height);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1030;
+}
+
+.wrapper {
+  margin-top: var(--navbar-height);
+  min-height: calc(100vh - var(--navbar-height) - 40px);
+}
+
+/* ── Sidebar ─────────────────────────────────────────── */
+
+.sidebar {
+  width: var(--sidebar-width);
+  min-height: calc(100vh - var(--navbar-height));
+  background: var(--sidebar-bg);
+  position: fixed;
+  top: var(--navbar-height);
+  left: 0;
+  overflow-y: auto;
+  transition: width 0.25s ease;
+  z-index: 1020;
+  flex-shrink: 0;
+}
+
+.sidebar.collapsed {
+  width: 56px;
+}
+
+.sidebar-sticky {
+  padding: 12px 0;
+}
+
+.sidebar .nav-link {
+  color: #9ca3b0;
+  padding: 9px 20px;
+  border-radius: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.sidebar .nav-link:hover {
+  background: rgba(255,255,255,0.06);
+  color: #ffffff;
+}
+
+.sidebar .nav-link.active {
+  background: rgba(79, 110, 247, 0.15);
+  color: var(--primary);
+  border-right: 3px solid var(--primary);
+}
+
+.sidebar-section-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #4b5563;
+  padding: 16px 20px 4px;
+}
+
+.main-content {
+  margin-left: var(--sidebar-width);
+  transition: margin-left 0.25s ease;
+}
+
+.sidebar.collapsed + .main-content {
+  margin-left: 56px;
+}
+
+/* ── Navbar brand ──────────────────────────────────── */
+
+.brand-icon {
+  width: 30px;
+  height: 30px;
+  background: var(--primary);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.9rem;
+}
+
+.status-badge {
+  font-size: 0.72rem;
+}
+
+/* ── Stat cards ─────────────────────────────────────── */
+
+.stat-card .card-body {
+  padding: 1.1rem 1.25rem;
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bg-primary-soft   { background: rgba(79,110,247,0.12); }
+.bg-success-soft   { background: rgba(25,135,84,0.1);   }
+.bg-info-soft      { background: rgba(13,202,240,0.1);  }
+.bg-warning-soft   { background: rgba(255,193,7,0.12);  }
+.bg-danger-soft    { background: rgba(220,53,69,0.1);   }
+.bg-secondary-soft { background: rgba(108,117,125,0.1); }
+
+.stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #1a1d23;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ── Cards ───────────────────────────────────────────── */
+
+.card {
+  border-radius: 12px;
+}
+
+.card-header {
+  padding: 1rem 1.25rem 0.5rem;
+}
+
+/* ── Page title ─────────────────────────────────────── */
+
+.page-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a1d23;
+}
+
+/* ── Tables ─────────────────────────────────────────── */
+
+.table th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+/* ── Article cards ──────────────────────────────────── */
+
+.article-card {
+  border-radius: 10px;
+  transition: box-shadow 0.15s;
+}
+
+.article-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+}
+
+/* ── Prose content (article modal) ─────────────────── */
+
+.article-prose {
+  font-size: 0.9rem;
+  line-height: 1.8;
+  color: #374151;
+}
+
+.article-prose h1, .article-prose h2, .article-prose h3 {
+  color: #1a1d23;
+  font-weight: 700;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.article-prose h1 { font-size: 1.5rem; }
+.article-prose h2 { font-size: 1.25rem; }
+.article-prose h3 { font-size: 1.1rem; }
+
+.article-prose p  { margin-bottom: 1rem; }
+
+.article-prose ul, .article-prose ol {
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.article-prose li { margin-bottom: 0.35rem; }
+
+/* ── Step progress (Generate page) ─────────────────── */
+
+.step-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #dee2e6;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.step-dot.active {
+  background: #ffc107;
+  box-shadow: 0 0 0 3px rgba(255,193,7,0.25);
+}
+
+.step-dot.done {
+  background: #198754;
+}
+
+/* ── Newsletter list ────────────────────────────────── */
+
+.newsletter-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(13,202,240,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.newsletter-content {
+  white-space: pre-line;
+  color: #374151;
+}
+
+/* ── Footer ─────────────────────────────────────────── */
+
+.footer {
+  margin-left: var(--sidebar-width);
+  position: sticky;
+  bottom: 0;
+  z-index: 1010;
+}
+
+/* ── Badges ─────────────────────────────────────────── */
+
+.badge { font-weight: 500; font-size: 0.72rem; }
+
+/* ── Responsive ─────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 56px;
+  }
+  .sidebar .nav-link span,
+  .sidebar-section-label {
+    display: none;
+  }
+  .main-content {
+    margin-left: 56px;
+  }
+  .footer {
+    margin-left: 56px;
+  }
+}

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Topics — AI Content Platform{% endblock %}
+
+{% block page_actions %}
+<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createTopicModal">
+  <i class="bi bi-plus-lg me-1"></i>New Topic
+</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2">
+    <i class="bi bi-tags text-primary"></i>
+    <h6 class="mb-0 fw-semibold">All Topics</h6>
+    <span class="badge bg-primary ms-auto" id="topicCount">0</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">#</th>
+            <th>Name</th>
+            <th>Tone</th>
+            <th>Created</th>
+            <th class="text-end pe-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="topicsTableBody">
+          <tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Create Topic Modal -->
+<div class="modal fade" id="createTopicModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2 text-primary"></i>New Topic</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Topic Name <span class="text-danger">*</span></label>
+          <input type="text" id="topicName" class="form-control" placeholder="e.g. Benefits of Remote Work" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tone</label>
+          <select id="topicTone" class="form-select">
+            <option value="professional">Professional</option>
+            <option value="friendly">Friendly</option>
+            <option value="casual">Casual</option>
+            <option value="neutral" selected>Neutral</option>
+            <option value="persuasive">Persuasive</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="createTopic()">
+          <i class="bi bi-plus-lg me-1"></i>Create Topic
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Topic Modal -->
+<div class="modal fade" id="editTopicModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil me-2 text-warning"></i>Edit Topic</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editTopicId" />
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Topic Name</label>
+          <input type="text" id="editTopicName" class="form-control" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tone</label>
+          <select id="editTopicTone" class="form-select">
+            <option value="professional">Professional</option>
+            <option value="friendly">Friendly</option>
+            <option value="casual">Casual</option>
+            <option value="neutral">Neutral</option>
+            <option value="persuasive">Persuasive</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-warning" onclick="updateTopic()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  async function loadTopics() {
+    const topics = await apiFetch('/topics') || [];
+    setText('topicCount', topics.length);
+    const tbody = document.getElementById('topicsTableBody');
+    tbody.innerHTML = topics.length
+      ? topics.map(t => `
+        <tr>
+          <td class="ps-4 text-muted">${t.id}</td>
+          <td class="fw-semibold">${escHtml(t.name)}</td>
+          <td><span class="badge bg-secondary">${t.tone}</span></td>
+          <td class="text-muted small">${formatDate(t.created_at)}</td>
+          <td class="text-end pe-4">
+            <button class="btn btn-sm btn-outline-warning me-1"
+              onclick="openEditTopic(${t.id},'${escHtml(t.name)}','${t.tone}')">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger"
+              onclick="confirmDelete('Delete topic &ldquo;${escHtml(t.name)}&rdquo;?', () => deleteTopic(${t.id}))">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" class="text-center text-muted py-4">No topics yet. Create one above.</td></tr>';
+  }
+
+  async function createTopic() {
+    const name = document.getElementById('topicName').value.trim();
+    const tone = document.getElementById('topicTone').value;
+    if (!name) { showToast('Topic name is required', 'danger'); return; }
+    const result = await apiFetch('/topics', 'POST', { name, tone });
+    if (result) {
+      showToast('Topic created!', 'success');
+      bootstrap.Modal.getInstance(document.getElementById('createTopicModal')).hide();
+      document.getElementById('topicName').value = '';
+      loadTopics();
+    }
+  }
+
+  function openEditTopic(id, name, tone) {
+    document.getElementById('editTopicId').value   = id;
+    document.getElementById('editTopicName').value = name;
+    document.getElementById('editTopicTone').value = tone;
+    new bootstrap.Modal(document.getElementById('editTopicModal')).show();
+  }
+
+  async function updateTopic() {
+    const id   = document.getElementById('editTopicId').value;
+    const name = document.getElementById('editTopicName').value.trim();
+    const tone = document.getElementById('editTopicTone').value;
+    const result = await apiFetch(`/topics/${id}`, 'PUT', { name, tone });
+    if (result) {
+      showToast('Topic updated!', 'success');
+      bootstrap.Modal.getInstance(document.getElementById('editTopicModal')).hide();
+      loadTopics();
+    }
+  }
+
+  async function deleteTopic(id) {
+    const ok = await apiFetch(`/topics/${id}`, 'DELETE');
+    if (ok !== null) { showToast('Topic deleted', 'success'); loadTopics(); }
+  }
+
+  loadTopics();
+</script>
+{% endblock %}

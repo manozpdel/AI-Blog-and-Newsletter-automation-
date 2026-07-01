@@ -19,7 +19,6 @@ services:
   worker:
     build: .
     container_name: ai-content-worker
-    # Consumes both content_queue and email_queue — no new containers needed
     command: [
       "uv", "run", "celery", "-A", "app.workers.celery_app", "worker",
       "--loglevel=info",
@@ -49,15 +48,17 @@ services:
       - ./app:/app/app
     restart: unless-stopped
 
-  streamlit:
-    build: ./streamlit_app
-    container_name: ai-content-streamlit
+  flower:
+    build: .
+    container_name: ai-content-flower
+    command: ["uv", "run", "celery", "-A", "app.workers.celery_app", "flower", "--port=5555"]
     ports:
-      - "8501:8501"
+      - "5555:5555"
     env_file:
       - .env
     depends_on:
-      - api
+      - rabbitmq
+      - redis
     restart: unless-stopped
 
   postgres:

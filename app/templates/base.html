@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}AI Content Platform{% endblock %}</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <!-- Custom styles -->
+  <link href="/static/css/style.css" rel="stylesheet" />
+</head>
+<body>
+
+{% include "components/navbar.html" %}
+
+<div class="wrapper d-flex">
+  {% include "components/sidebar.html" %}
+
+  <main class="main-content flex-grow-1">
+    <div class="container-fluid py-4 px-4">
+
+      <!-- Page header -->
+      {% if page_title %}
+      <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+          <h4 class="page-title mb-0">
+            {% if page_icon %}<i class="{{ page_icon }} me-2 text-primary"></i>{% endif %}
+            {{ page_title }}
+          </h4>
+          {% if page_subtitle %}
+          <p class="text-muted small mb-0 mt-1">{{ page_subtitle }}</p>
+          {% endif %}
+        </div>
+        {% block page_actions %}{% endblock %}
+      </div>
+      {% endif %}
+
+      <!-- Toast notifications -->
+      <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999">
+        <div id="appToast" class="toast align-items-center border-0" role="alert">
+          <div class="d-flex">
+            <div class="toast-body" id="toastMessage"></div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Global spinner -->
+      <div id="globalSpinner" class="d-none position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background:rgba(0,0,0,0.35);z-index:9998">
+        <div class="spinner-border text-light" style="width:3rem;height:3rem;" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+      </div>
+
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+
+{% include "components/footer.html" %}
+
+<!-- Bootstrap 5 JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Global app JS -->
+<script src="/static/js/app.js"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

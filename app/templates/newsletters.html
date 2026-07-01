@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Newsletters — AI Content Platform{% endblock %}
+
+{% block content %}
+
+<div class="row g-4">
+
+  <!-- Newsletter list -->
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold"><i class="bi bi-envelope-paper me-2 text-info"></i>All Newsletters</h6>
+        <span class="badge bg-info" id="newsletterCount">0</span>
+      </div>
+      <div class="card-body p-0">
+        <div id="newsletterList" class="list-group list-group-flush">
+          <div class="text-center text-muted py-4">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview panel -->
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold"><i class="bi bi-eye me-2"></i>Preview</h6>
+        <button class="btn btn-sm btn-outline-secondary d-none" id="downloadBtn" onclick="downloadNewsletter()">
+          <i class="bi bi-download me-1"></i>Download HTML
+        </button>
+      </div>
+      <div class="card-body" id="previewPanel">
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-envelope-open fs-1 d-block mb-2 text-secondary"></i>
+          Select a newsletter to preview
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  let selectedNewsletter = null;
+
+  async function loadNewsletters() {
+    const newsletters = await apiFetch('/newsletters') || [];
+    const articles    = await apiFetch('/articles')    || [];
+    const articleMap  = Object.fromEntries(articles.map(a => [a.id, a]));
+
+    setText('newsletterCount', newsletters.length);
+
+    const list = document.getElementById('newsletterList');
+    list.innerHTML = newsletters.length
+      ? newsletters.map(n => {
+          const article = articleMap[n.article_id] || {};
+          return `
+          <button class="list-group-item list-group-item-action p-3"
+            onclick="previewNewsletter(${JSON.stringify(n).replace(/"/g, '&quot;')}, '${escHtml(article.title || 'Untitled')}')">
+            <div class="d-flex align-items-center gap-3">
+              <div class="newsletter-icon">
+                <i class="bi bi-envelope-paper text-info fs-5"></i>
+              </div>
+              <div class="flex-grow-1">
+                <div class="fw-semibold small">${escHtml(article.title || 'Untitled Article')}</div>
+                <div class="text-muted" style="font-size:0.75rem">
+                  Newsletter #${n.id} &middot; ${formatDate(n.created_at)}
+                </div>
+              </div>
+              <i class="bi bi-chevron-right text-muted"></i>
+            </div>
+          </button>`;
+        }).join('')
+      : '<div class="text-center text-muted py-4">No newsletters yet.</div>';
+  }
+
+  function previewNewsletter(newsletter, articleTitle) {
+    selectedNewsletter = { ...newsletter, articleTitle };
+    document.getElementById('downloadBtn').classList.remove('d-none');
+
+    const preview = document.getElementById('previewPanel');
+    preview.innerHTML = `
+      <div class="mb-3 pb-2 border-bottom">
+        <div class="text-muted small mb-1">Article</div>
+        <div class="fw-semibold">${escHtml(articleTitle)}</div>
+        <div class="text-muted small mt-1">${formatDate(newsletter.created_at)}</div>
+      </div>
+      <div class="newsletter-content small lh-lg">${escHtml(newsletter.content)}</div>
+    `;
+  }
+
+  function downloadNewsletter() {
+    if (!selectedNewsletter) return;
+    const blob = new Blob([selectedNewsletter.content], { type: 'text/html' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `newsletter-${selectedNewsletter.id}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  loadNewsletters();
+</script>
+{% endblock %}
