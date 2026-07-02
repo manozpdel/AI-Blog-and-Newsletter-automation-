@@ -1,0 +1,62 @@
+<nav id="sidebar" class="sidebar bg-dark">
+    <div class="sidebar-sticky">
+      <ul class="nav flex-column pt-2">
+  
+        <li class="nav-item">
+          <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="/">
+            <i class="bi bi-speedometer2 me-2"></i>Dashboard
+          </a>
+        </li>
+  
+        <li class="sidebar-section-label">Content</li>
+  
+        <li class="nav-item">
+          <a class="nav-link {% if active_page == 'topics' %}active{% endif %}" href="/topics/page">
+            <i class="bi bi-tags me-2"></i>Topics
+          </a>
+        </li>
+  
+        <li class="nav-item">
+          <a class="nav-link {% if active_page == 'generate' %}active{% endif %}" href="/generate/page">
+            <i class="bi bi-lightning-charge me-2"></i>Generate Content
+          </a>
+        </li>
+  
+        <li class="nav-item">
+          <a class="nav-link {% if active_page == 'articles' %}active{% endif %}" href="/articles/page">
+            <i class="bi bi-file-earmark-text me-2"></i>Articles
+          </a>
+        </li>
+  
+        <li class="nav-item">
+          <a class="nav-link {% if active_page == 'newsletters' %}active{% endif %}" href="/newsletters/page">
+            <i class="bi bi-envelope-paper me-2"></i>Newsletters
+          </a>
+        </li>
+  
+        <li class="sidebar-section-label">Audience</li>
+  
+        <li class="nav-item">
+          <a class="nav-link {% if active_page == 'subscribers' %}active{% endif %}" href="/subscribers/page">
+            <i class="bi bi-people me-2"></i>Subscribers
+          </a>
+        </li>
+  
+        <li class="sidebar-section-label">Monitoring</li>
+  
+        <li class="nav-item">
+          <a class="nav-link {% if active_page == 'tasks' %}active{% endif %}" href="/tasks/page">
+            <i class="bi bi-activity me-2"></i>Task Monitor
+          </a>
+        </li>
+  
+        <li class="nav-item">
+          <a class="nav-link" href="http://localhost:5555" target="_blank">
+            <i class="bi bi-flower1 me-2"></i>Flower
+            <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+          </a>
+        </li>
+  
+      </ul>
+    </div>
+  </nav>

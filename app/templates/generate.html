@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Generate Content — AI Content Platform{% endblock %}
+
+{% block content %}
+
+<div class="row g-4">
+
+  <!-- Generate form -->
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-transparent border-0">
+        <h6 class="mb-0 fw-semibold"><i class="bi bi-lightning-charge me-2 text-warning"></i>Generate Article</h6>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Select Topic <span class="text-danger">*</span></label>
+          <select id="topicSelect" class="form-select">
+            <option value="">Loading topics...</option>
+          </select>
+        </div>
+        <button class="btn btn-primary w-100" onclick="startGeneration()" id="generateBtn">
+          <i class="bi bi-lightning-charge me-1"></i>Generate Article
+        </button>
+      </div>
+    </div>
+
+    <!-- Generate Newsletter form -->
+    <div class="card border-0 shadow-sm mt-4">
+      <div class="card-header bg-transparent border-0">
+        <h6 class="mb-0 fw-semibold"><i class="bi bi-envelope-paper me-2 text-info"></i>Generate Newsletter</h6>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Select Article <span class="text-danger">*</span></label>
+          <select id="articleSelect" class="form-select">
+            <option value="">Loading articles...</option>
+          </select>
+        </div>
+        <button class="btn btn-info text-white w-100" onclick="generateNewsletter()">
+          <i class="bi bi-envelope-paper me-1"></i>Generate + Send Newsletter
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task status panel -->
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold"><i class="bi bi-activity me-2 text-primary"></i>Task Status</h6>
+        <span id="taskStatusBadge" class="badge bg-secondary">Idle</span>
+      </div>
+      <div class="card-body">
+        <div id="taskIdBox" class="d-none mb-3">
+          <label class="form-label small text-muted">Task ID</label>
+          <div class="input-group input-group-sm">
+            <input type="text" class="form-control font-monospace" id="currentTaskId" readonly />
+            <button class="btn btn-outline-secondary" onclick="copyTaskId()" title="Copy">
+              <i class="bi bi-clipboard"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress steps -->
+        <div id="progressSteps" class="d-none mb-3">
+          <div class="step-item d-flex align-items-center gap-2 mb-2" id="step1">
+            <div class="step-dot"></div>
+            <span class="small">Generating title...</span>
+          </div>
+          <div class="step-item d-flex align-items-center gap-2 mb-2" id="step2">
+            <div class="step-dot"></div>
+            <span class="small">Creating outline...</span>
+          </div>
+          <div class="step-item d-flex align-items-center gap-2" id="step3">
+            <div class="step-dot"></div>
+            <span class="small">Writing full article...</span>
+          </div>
+        </div>
+
+        <!-- Result -->
+        <div id="taskResult" class="d-none">
+          <div class="alert alert-success border-0">
+            <i class="bi bi-check-circle-fill me-2"></i>
+            <strong>Article generated successfully!</strong>
+          </div>
+          <div class="border rounded p-3 bg-light">
+            <div class="text-muted small mb-1">Title</div>
+            <div class="fw-semibold" id="resultTitle">—</div>
+            <div class="text-muted small mt-2 mb-1">Article ID</div>
+            <div class="font-monospace small" id="resultArticleId">—</div>
+          </div>
+          <a href="/articles/page" class="btn btn-sm btn-outline-primary mt-3">
+            <i class="bi bi-file-earmark-text me-1"></i>View Articles
+          </a>
+        </div>
+
+        <!-- Error -->
+        <div id="taskError" class="d-none">
+          <div class="alert alert-danger border-0">
+            <i class="bi bi-x-circle-fill me-2"></i>
+            <strong>Generation failed.</strong>
+            <div class="small mt-1" id="errorMessage"></div>
+          </div>
+        </div>
+
+        <!-- Idle placeholder -->
+        <div id="taskIdle" class="text-center text-muted py-5">
+          <i class="bi bi-lightning-charge fs-1 mb-2 d-block text-secondary"></i>
+          Select a topic and click Generate to start
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  let pollInterval = null;
+
+  async function loadSelects() {
+    const topics = await apiFetch('/topics') || [];
+    const sel = document.getElementById('topicSelect');
+    sel.innerHTML = topics.length
+      ? '<option value="">— Select a topic —</option>' +
+        topics.map(t => `<option value="${t.id}">${escHtml(t.name)} (${t.tone})</option>`).join('')
+      : '<option value="">No topics available — create one first</option>';
+
+    const articles = await apiFetch('/articles') || [];
+    const completedArticles = articles.filter(a => a.status === 'COMPLETED');
+    const asel = document.getElementById('articleSelect');
+    asel.innerHTML = completedArticles.length
+      ? '<option value="">— Select an article —</option>' +
+        completedArticles.map(a => `<option value="${a.id}">${escHtml(a.title || 'Untitled')} #${a.id}</option>`).join('')
+      : '<option value="">No completed articles yet</option>';
+  }
+
+  async function startGeneration() {
+    const topicId = document.getElementById('topicSelect').value;
+    if (!topicId) { showToast('Please select a topic', 'warning'); return; }
+
+    resetTaskUI();
+    document.getElementById('generateBtn').disabled = true;
+    document.getElementById('taskIdle').classList.add('d-none');
+    document.getElementById('taskIdBox').classList.remove('d-none');
+    document.getElementById('progressSteps').classList.remove('d-none');
+    setTaskBadge('Running', 'warning');
+
+    const result = await apiFetch(`/generate/${topicId}`, 'POST');
+    if (!result) { document.getElementById('generateBtn').disabled = false; return; }
+
+    const taskId = result.task_id;
+    document.getElementById('currentTaskId').value = taskId;
+
+    let step = 0;
+    pollInterval = setInterval(async () => {
+      step = Math.min(step + 1, 2);
+      highlightStep(step);
+
+      const status = await apiFetch(`/tasks/${taskId}`);
+      if (!status) return;
+
+      if (status.state === 'SUCCESS') {
+        clearInterval(pollInterval);
+        highlightStep(2, true);
+        setTaskBadge('Success', 'success');
+        document.getElementById('taskResult').classList.remove('d-none');
+        document.getElementById('resultTitle').textContent     = status.result?.title || '—';
+        document.getElementById('resultArticleId').textContent = status.result?.article_id || '—';
+        document.getElementById('generateBtn').disabled = false;
+        loadSelects();
+      } else if (status.state === 'FAILURE') {
+        clearInterval(pollInterval);
+        setTaskBadge('Failed', 'danger');
+        document.getElementById('taskError').classList.remove('d-none');
+        document.getElementById('errorMessage').textContent = status.result || 'Unknown error';
+        document.getElementById('generateBtn').disabled = false;
+      }
+    }, 3000);
+  }
+
+  async function generateNewsletter() {
+    const articleId = document.getElementById('articleSelect').value;
+    if (!articleId) { showToast('Please select an article', 'warning'); return; }
+    showSpinner();
+    const result = await apiFetch(`/generate-newsletter/${articleId}`, 'POST');
+    hideSpinner();
+    if (result) {
+      showToast(`Newsletter #${result.newsletter_id} created & emails queued!`, 'success');
+    }
+  }
+
+  function resetTaskUI() {
+    clearInterval(pollInterval);
+    document.getElementById('taskResult').classList.add('d-none');
+    document.getElementById('taskError').classList.add('d-none');
+    document.getElementById('progressSteps').classList.add('d-none');
+    document.querySelectorAll('.step-dot').forEach(d => {
+      d.className = 'step-dot';
+    });
+  }
+
+  function highlightStep(idx, done = false) {
+    const steps = ['step1','step2','step3'];
+    steps.forEach((id, i) => {
+      const dot = document.getElementById(id)?.querySelector('.step-dot');
+      if (!dot) return;
+      if (i < idx) dot.className = 'step-dot done';
+      else if (i === idx) dot.className = done ? 'step-dot done' : 'step-dot active';
+      else dot.className = 'step-dot';
+    });
+  }
+
+  function setTaskBadge(label, color) {
+    const b = document.getElementById('taskStatusBadge');
+    b.className = `badge bg-${color}`;
+    b.textContent = label;
+  }
+
+  function copyTaskId() {
+    const val = document.getElementById('currentTaskId').value;
+    navigator.clipboard.writeText(val).then(() => showToast('Task ID copied!', 'info'));
+  }
+
+  loadSelects();
+</script>
+{% endblock %}

@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Articles — AI Content Platform{% endblock %}
+
+{% block content %}
+
+<!-- Search + filter bar -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-center">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text bg-transparent border-end-0">
+            <i class="bi bi-search text-muted"></i>
+          </span>
+          <input type="text" id="searchInput" class="form-control border-start-0"
+            placeholder="Search articles..." oninput="filterArticles()" />
+        </div>
+      </div>
+      <div class="col-md-3">
+        <select id="statusFilter" class="form-select" onchange="filterArticles()">
+          <option value="">All statuses</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="PROCESSING">Processing</option>
+          <option value="PENDING">Pending</option>
+          <option value="FAILED">Failed</option>
+        </select>
+      </div>
+      <div class="col-md-3 text-end">
+        <span class="text-muted small" id="articleCountLabel">0 articles</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Articles list -->
+<div id="articlesContainer"></div>
+
+<!-- Pagination -->
+<nav class="mt-3">
+  <ul class="pagination justify-content-center" id="pagination"></ul>
+</nav>
+
+<!-- Article content modal -->
+<div class="modal fade" id="articleModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="articleModalTitle">Article</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body prose" id="articleModalContent"></div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const PAGE_SIZE = 10;
+  let allArticles = [];
+  let filteredArticles = [];
+  let currentPage = 1;
+
+  async function loadArticles() {
+    allArticles = await apiFetch('/articles') || [];
+    filterArticles();
+  }
+
+  function filterArticles() {
+    const q      = document.getElementById('searchInput').value.toLowerCase();
+    const status = document.getElementById('statusFilter').value;
+    filteredArticles = allArticles.filter(a => {
+      const matchQ = !q || (a.title || '').toLowerCase().includes(q);
+      const matchS = !status || a.status === status;
+      return matchQ && matchS;
+    });
+    currentPage = 1;
+    renderPage();
+  }
+
+  function renderPage() {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const page  = filteredArticles.slice(start, start + PAGE_SIZE);
+    const count = filteredArticles.length;
+
+    setText('articleCountLabel', `${count} article${count !== 1 ? 's' : ''}`);
+
+    const container = document.getElementById('articlesContainer');
+    container.innerHTML = page.length
+      ? page.map(a => `
+        <div class="card border-0 shadow-sm mb-3 article-card">
+          <div class="card-body">
+            <div class="d-flex align-items-start justify-content-between gap-2">
+              <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  ${statusBadge(a.status)}
+                  <span class="text-muted small">Article #${a.id} &middot; Topic #${a.topic_id}</span>
+                </div>
+                <h6 class="fw-semibold mb-1">${escHtml(a.title || 'Untitled')}</h6>
+                <p class="text-muted small mb-0">${formatDate(a.created_at)}</p>
+              </div>
+              <button class="btn btn-sm btn-outline-primary flex-shrink-0"
+                onclick="viewArticle(${a.id}, '${escHtml(a.title || 'Untitled')}')">
+                <i class="bi bi-eye me-1"></i>View Content
+              </button>
+            </div>
+          </div>
+        </div>`).join('')
+      : '<div class="text-center text-muted py-5"><i class="bi bi-file-earmark fs-1 d-block mb-2"></i>No articles found</div>';
+
+    renderPagination(count);
+  }
+
+  function renderPagination(total) {
+    const pages = Math.ceil(total / PAGE_SIZE);
+    const ul = document.getElementById('pagination');
+    if (pages <= 1) { ul.innerHTML = ''; return; }
+    ul.innerHTML = Array.from({ length: pages }, (_, i) => `
+      <li class="page-item ${i + 1 === currentPage ? 'active' : ''}">
+        <button class="page-link" onclick="goToPage(${i + 1})">${i + 1}</button>
+      </li>`).join('');
+  }
+
+  function goToPage(p) { currentPage = p; renderPage(); }
+
+  async function viewArticle(id, title) {
+    document.getElementById('articleModalTitle').textContent = title;
+    document.getElementById('articleModalContent').innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+    new bootstrap.Modal(document.getElementById('articleModal')).show();
+
+    const article = await apiFetch(`/articles/${id}`);
+    document.getElementById('articleModalContent').innerHTML = article?.content
+      ? `<div class="article-prose">${markdownToHtml(article.content)}</div>`
+      : '<p class="text-muted">Content not available yet.</p>';
+  }
+
+  loadArticles();
+</script>
+{% endblock %}
